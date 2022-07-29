@@ -504,7 +504,7 @@ class Blockchain(Logger):
         assert delta == self.size(), (delta, self.size())
         assert len(data) == POST_KAWPOW_HEADER_SIZE
         self.write(data, delta * POST_KAWPOW_HEADER_SIZE)
-        self.swap_with_parent()
+        # self.swap_with_parent()
 
     @with_lock
     def read_header(self, height: int) -> Optional[dict]:

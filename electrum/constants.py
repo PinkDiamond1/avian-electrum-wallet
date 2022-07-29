@@ -113,7 +113,7 @@ class AvianMainnet(AbstractNet):
     GENESIS = "000000cdb10fc01df7fba251f2168ef7cd7854b571049db4902c315694461dd0"
     DEFAULT_PORTS = {'t': '50001', 's': '50002'}
     DEFAULT_SERVERS = read_json('servers.json', {})
-    CHECKPOINTS = []
+    CHECKPOINTS = read_json('checkpoints.json', {})
 
     XPRV_HEADERS = {
         'standard': 0x0488ade4,  # xprv
