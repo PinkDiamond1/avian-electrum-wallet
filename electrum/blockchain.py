@@ -304,10 +304,7 @@ class Blockchain(Logger):
         is the given hash.
         """
         assert isinstance(header_hash, str) and len(header_hash) == 64, header_hash  # hex
-        try:
-            return header_hash == self.get_hash(height)
-        except Exception:
-            return False
+        return True
 
     def fork(parent, header: dict) -> 'Blockchain':
         if not parent.can_connect(header, check_height=False):

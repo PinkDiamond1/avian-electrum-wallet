@@ -1174,19 +1174,17 @@ def time_difference(distance_in_time, include_seconds):
 
 
 mainnet_block_explorers = {
-    'avian.network': ('https://avian.network/',
+    'explorer-us.avn.network': ('https://explorer-us.avn.network/',
                           {'tx': 'tx/', 'addr': 'address/'}),
-    'avn.traysi.org': ('http://avn.traysi.org/',
-                       {'tx': 'tx/', 'addr': 'address/'}),
-    'avn.cryptoscope.io': ('https://avn.cryptoscope.io/',
-                           {'tx': 'tx/?txid=', 'addr': 'address/?address='}),
+    'explorer-eu.avn.network': ('https://explorer-eu.avn.network/',
+                          {'tx': 'tx/', 'addr': 'address/'}),
+    'explorer-ap.avn.network': ('https://explorer-ap.avn.network/',
+                          {'tx': 'tx/', 'addr': 'address/'}),
 }
 
 testnet_block_explorers = {
-    'avian.network': ('https://testnet.avian.network/',
-                          {'tx': 'tx/', 'addr': 'address/'}),
-    'avn.cryptoscope.io': ('https://avnt.cryptoscope.io/',
-                           {'tx': 'tx/?txid=', 'addr': 'address/?address='}),
+    'testnet.avn.network/': ('https://testnet.avn.network//',
+                          {'tx': 'tx/', 'addr': 'address/'})
 }
 
 signet_block_explorers = {
