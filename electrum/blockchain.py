@@ -56,22 +56,10 @@ DGW_PASTBLOCKS = 180
 X16RTActivationTS = 1638847406
 CrowActivationTS = 1638847407
 
-X16Rv2ActivationTS = 1569945600
-KawpowActivationTS = 1588788000
-KawpowActivationHeight = 1219736
-
-nDGWActivationBlock = 0
-
-
 def set_constants():
-    global X16RTActivationTS, CrowActivationTS, X16Rv2ActivationTS, KawpowActivationTS, KawpowActivationHeight, nDGWActivationBlock
+    global X16RTActivationTS, CrowActivationTS
     X16RTActivationTS = 1638847406
     CrowActivationTS = 1638847407
-    X16Rv2ActivationTS = 1569945600
-    KawpowActivationTS = 1588788000
-    KawpowActivationHeight = 1219736
-    nDGWActivationBlock = 0
-
 
 class MissingHeader(Exception):
     pass
@@ -264,15 +252,7 @@ class Blockchain(Logger):
         self._prev_hash = prev_hash  # blockhash immediately before forkpoint
         self.lock = threading.RLock()
         self.update_size()
-
-    @property
-    def checkpoints(self):
-        return constants.net.CHECKPOINTS
-
-    @property
-    def dgw_checkpoints(self):
-        return constants.net.DGW_CHECKPOINTS
-
+        
     def get_max_child(self) -> Optional[int]:
         children = self.get_direct_children()
         return max([x.forkpoint for x in children]) if children else None
@@ -376,10 +356,8 @@ class Blockchain(Logger):
         bits = cls.target_to_bits(target)
         if bits != header.get('bits'):
             raise Exception("bits mismatch: %s vs %s" % (bits, header.get('bits')))
-        if header['timestamp'] >= KawpowActivationTS:
-            hash_func = kawpow_hash
-        elif header['timestamp'] >= X16Rv2ActivationTS:
-            hash_func = x16rv2_hash.getPoWHash
+        elif header['timestamp'] >= X16RTActivationTS:
+            hash_func = x16rt_hash.getPoWHash
         else:
             hash_func = x16r_hash.getPoWHash
         _powhash = rev_hex(bh2u(hash_func(bfh(serialize_header(header)))))
@@ -393,12 +371,8 @@ class Blockchain(Logger):
         prev_hash = self.get_hash(start_height - 1)
         headers = {}
         while p < len(data):
-            if s < KawpowActivationHeight:
-                raw = data[p:p + PRE_KAWPOW_HEADER_SIZE]
-                p += PRE_KAWPOW_HEADER_SIZE
-            else:
-                raw = data[p:p + POST_KAWPOW_HEADER_SIZE]
-                p += POST_KAWPOW_HEADER_SIZE
+            raw = data[p:p + PRE_KAWPOW_HEADER_SIZE]
+            p += PRE_KAWPOW_HEADER_SIZE
             try:
                 expected_header_hash = self.get_hash(s)
             except MissingHeader:
@@ -466,13 +440,8 @@ class Blockchain(Logger):
             p = 0
             s = start_height
             while p < len(chunk):
-                if s < KawpowActivationHeight:
-                    r += chunk[p:p + PRE_KAWPOW_HEADER_SIZE] + bytes(40)
-                    p += PRE_KAWPOW_HEADER_SIZE
-                else:
-                    r += chunk[p:p + POST_KAWPOW_HEADER_SIZE]
-                    p += POST_KAWPOW_HEADER_SIZE
-                s += 1
+                r += chunk[p:p + PRE_KAWPOW_HEADER_SIZE] + bytes(40)
+                p += PRE_KAWPOW_HEADER_SIZE
             if len(r) % POST_KAWPOW_HEADER_SIZE != 0:
                 raise Exception('Header extension error')
             return r
@@ -620,23 +589,6 @@ class Blockchain(Logger):
             return True
         return False
 
-    @staticmethod
-    def is_dgw_height_checkpoint(height) -> Optional[int]:
-        # Less than the start of saved checkpoints
-        if height < constants.net.DGW_CHECKPOINTS_START:
-            return None
-        # Greater than the end of the saved checkpoints
-        if height > constants.net.max_dgw_checkpoint() + 2016:
-            return None
-        height_mod = height % constants.net.DGW_CHECKPOINTS_SPACING
-        # Is the first saved
-        if height_mod == 0:
-            return 0
-        # Is the last saved
-        elif height_mod == constants.net.DGW_CHECKPOINTS_SPACING - 1:
-            return 1
-        return None
-
     def get_hash(self, height: int) -> str:
         if height == -1:
             return '0000000000000000000000000000000000000000000000000000000000000000'
@@ -649,10 +601,6 @@ class Blockchain(Logger):
             return hash_header(header)
 
     def get_target(self, height: int, chain=None) -> int:
-        dgw_height_checkpoint = self.is_dgw_height_checkpoint(height)
-
-        if constants.net.TESTNET:
-            return 0
         # Before we switched to Dark Wave Gravity Difficulty,
         # We used bitcoin's method of calculating difficulty.
         # The bits of each block (the difficulty) was the same for
@@ -662,23 +610,24 @@ class Blockchain(Logger):
         # 2716428330192056873911465544471964056901126523302699863524769792
         # is technically incorrect but necessary due to DGW activating
         # in the middle of that chunk.
-        elif height < nDGWActivationBlock:
-            h, t = self.checkpoints[height // 2016]
-            return t
-        elif dgw_height_checkpoint is not None:
-            index = height // constants.net.DGW_CHECKPOINTS_SPACING - constants.net.DGW_CHECKPOINTS_START // constants.net.DGW_CHECKPOINTS_SPACING
-            h, t = self.dgw_checkpoints[index][dgw_height_checkpoint]
-            return t
-        # There was a difficulty reset for kawpow
-        elif not constants.net.TESTNET and height in range(1219736, 1219736 + 180):  # kawpow reset
-            return KAWPOW_LIMIT
+        # elif height < nDGWActivationBlock:
+        #     h, t = self.checkpoints[height // 2016]
+        #     return t
+        # elif dgw_height_checkpoint is not None:
+        #     index = height // constants.net.DGW_CHECKPOINTS_SPACING - constants.net.DGW_CHECKPOINTS_START // constants.net.DGW_CHECKPOINTS_SPACING
+        #     h, t = self.dgw_checkpoints[index][dgw_height_checkpoint]
+        #     return t
+        # # There was a difficulty reset for kawpow
+        # elif not constants.net.TESTNET and height in range(1219736, 1219736 + 180):  # kawpow reset
+        #     return KAWPOW_LIMIT
         # If we have a DWG header already saved to our header cache (i.e. for a reorg), get that
-        elif height <= self.height():
-            return self.bits_to_target(self.read_header(height)['bits'])
-        else:
-            # Now we no longer have cached checkpoints and need to compute our own DWG targets to verify
-            # a header
-            return self.get_target_dgwv3(height, chain)
+        # elif height <= self.height():
+        #     return self.bits_to_target(self.read_header(height)['bits'])
+        # else:
+        #     # Now we no longer have cached checkpoints and need to compute our own DWG targets to verify
+        #     # a header
+        #     return self.get_target_dgwv3(height, chain)
+        return 0 # Return 0
 
     def convbignum(self, bits):
         MM = 256 * 256 * 256
@@ -698,7 +647,6 @@ class Blockchain(Logger):
                 pass
             if last is None:
                 last = self.read_header(height)
-                assert last is not None
             return last
 
         # params
