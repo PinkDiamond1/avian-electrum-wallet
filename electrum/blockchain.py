@@ -46,7 +46,12 @@ except ImportError as e:
 _logger = get_logger(__name__)
 
 MAX_TARGET = 0x00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
-KAWPOW_LIMIT = 0x0000000000ffffffffffffffffffffffffffffffffffffffffffffffffffffff
+
+# X16R / X16RT Limit
+X16R_LIMIT = 0x00000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+
+# MinotaurX Limit
+CROW_LIMIT = 0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 
 POST_KAWPOW_HEADER_SIZE = 80
 PRE_KAWPOW_HEADER_SIZE = 80
@@ -55,11 +60,13 @@ DGW_PASTBLOCKS = 180
 
 X16RTActivationTS = 1638847406
 CrowActivationTS = 1638847407
+CrowActivationBlock = 274564
 
 def set_constants():
-    global X16RTActivationTS, CrowActivationTS
+    global X16RTActivationTS, CrowActivationTS, CrowActivationBlock
     X16RTActivationTS = 1638847406
     CrowActivationTS = 1638847407
+    CrowActivationBlock = 274564
 
 class MissingHeader(Exception):
     pass
@@ -415,7 +422,7 @@ class Blockchain(Logger):
                 delta_bytes = 0
             truncate = not chunk_within_checkpoint_region
             self.write(chunk, delta_bytes, truncate)
-            self.swap_with_parent()
+            # self.swap_with_parent()
 
     def _swap_with_parent(self) -> bool:
         """Check if this chain became stronger than its parent, and swap
@@ -550,33 +557,16 @@ class Blockchain(Logger):
             return hash_header(header)
 
     def get_target(self, height: int, chain=None) -> int:
-        # Before we switched to Dark Wave Gravity Difficulty,
-        # We used bitcoin's method of calculating difficulty.
-        # The bits of each block (the difficulty) was the same for
-        # The entire 2016 block checkpoint. Note that the last block hash to target
-        # pairing in checkpoints.json
-        # "000000000000f0bf1b393ef1dbbf23421eba2ad09de6315dcfaabe106fcf9e7a",
-        # 2716428330192056873911465544471964056901126523302699863524769792
-        # is technically incorrect but necessary due to DGW activating
-        # in the middle of that chunk.
-        # elif height < nDGWActivationBlock:
-        #     h, t = self.checkpoints[height // 2016]
-        #     return t
-        # elif dgw_height_checkpoint is not None:
-        #     index = height // constants.net.DGW_CHECKPOINTS_SPACING - constants.net.DGW_CHECKPOINTS_START // constants.net.DGW_CHECKPOINTS_SPACING
-        #     h, t = self.dgw_checkpoints[index][dgw_height_checkpoint]
-        #     return t
-        # # There was a difficulty reset for kawpow
-        # elif not constants.net.TESTNET and height in range(1219736, 1219736 + 180):  # kawpow reset
-        #     return KAWPOW_LIMIT
-        # If we have a DWG header already saved to our header cache (i.e. for a reorg), get that
-        # elif height <= self.height():
-        #     return self.bits_to_target(self.read_header(height)['bits'])
-        # else:
-        #     # Now we no longer have cached checkpoints and need to compute our own DWG targets to verify
-        #     # a header
-        #     return self.get_target_dgwv3(height, chain)
-        return 0 # Return 0
+        if height < CrowActivationBlock:
+            # Before Crow dual-algo system use x16r/t limit
+            return X16R_LIMIT
+        version = int(self.read_header(height)['version'])
+        if (version >> 16) & 0xFF == 0:
+            # Crow dual-algo X16RT
+            return X16R_LIMIT
+        else:
+            # Crow dual-algo MinotaurX
+            return CROW_LIMIT
 
     def convbignum(self, bits):
         MM = 256 * 256 * 256
@@ -586,6 +576,7 @@ class Blockchain(Logger):
         target = a * pow(2, 8 * (bits // MM - 3))
         return target
 
+    # DGW (Dark Wave Gravity Difficulty)
     def get_target_dgwv3(self, height, chain=None) -> int:
 
         def get_block_reading_from_height(height):
