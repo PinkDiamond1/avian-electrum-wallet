@@ -76,35 +76,30 @@ class InvalidHeader(Exception):
 
 
 def serialize_header(header_dict: dict) -> str:
-    ts = header_dict['timestamp']
     s = int_to_hex(header_dict['version'], 4) \
         + rev_hex(header_dict['prev_block_hash']) \
         + rev_hex(header_dict['merkle_root']) \
         + int_to_hex(int(header_dict['timestamp']), 4) \
         + int_to_hex(int(header_dict['bits']), 4) \
         + int_to_hex(int(header_dict['nonce']), 4)
-    s = s.ljust(HEADER_SIZE * 2, '0')  # pad with zeros to post kawpow header size
     return s
 
 
 def deserialize_header(s: bytes, height: int) -> dict:
     if not s:
         raise InvalidHeader('Invalid header: {}'.format(s))
-    if len(s) not in (HEADER_SIZE, HEADER_SIZE):
+    if len(s) != HEADER_SIZE:
         raise InvalidHeader('Invalid header length: {}'.format(len(s)))
-
-    def hex_to_int(hex):
-        return int.from_bytes(hex, byteorder='little')
-
-    h = {'version': hex_to_int(s[0:4]),
-         'prev_block_hash': hash_encode(s[4:36]),
-         'merkle_root': hash_encode(s[36:68]),
-         'timestamp': int(hash_encode(s[68:72]), 16),
-         'bits': int(hash_encode(s[72:76]), 16)}
-    h['nonce'] = int(hash_encode(s[76:80]), 16)
+    hex_to_int = lambda s: int.from_bytes(s, byteorder='little')
+    h = {}
+    h['version'] = hex_to_int(s[0:4])
+    h['prev_block_hash'] = hash_encode(s[4:36])
+    h['merkle_root'] = hash_encode(s[36:68])
+    h['timestamp'] = hex_to_int(s[68:72])
+    h['bits'] = hex_to_int(s[72:76])
+    h['nonce'] = hex_to_int(s[76:80])
     h['block_height'] = height
     return h
-
 
 def hash_header(header: dict) -> str:
     if header is None:
