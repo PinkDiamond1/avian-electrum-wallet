@@ -28,6 +28,7 @@
 # Note: The deserialization code originally comes from ABE.
 import enum
 import logging
+from sre_constants import ANY
 import struct
 import traceback
 import sys
@@ -94,10 +95,16 @@ class SIGHASH(IntEnum):
     ALL = 0x01
     NONE = 0x02
     SINGLE = 0x03
+    FORKID = 0x40
     ANYONECANPAY = 0x80
-    ALL_ANYONECANPAY = ALL + ANYONECANPAY
-    NONE_ANYONECANPAY = NONE + ANYONECANPAY
-    SINGLE_ANYONECANPAY = SINGLE + ANYONECANPAY
+    ALL_FORKID = ALL + FORKID
+    NONE_FORKID = NONE + FORKID
+    NONE_FORKID_ANYONECANPAY = NONE + FORKID + ANYONECANPAY
+    SINGLE_FORKID = SINGLE + FORKID
+    SINGLE_FORKID_ANYONECANPAY = SINGLE + FORKID + ANYONECANPAY
+    ALL_ANYONECANPAY = ALL + ANYONECANPAY + FORKID
+    NONE_ANYONECANPAY = NONE + ANYONECANPAY + FORKID
+    SINGLE_ANYONECANPAY = SINGLE + ANYONECANPAY + FORKID
 
 
 class TxOutput:
@@ -756,6 +763,7 @@ def parse_input(vds: BCDataStream) -> TxInput:
     try:
         # Theoretically the script_sig is the very end of the first stack push
         sigtype = next(iter(script_GetOp(script_sig)))[1][-1]
+        sigtype += SIGHASH.FORKID
         if sigtype not in list(map(int, SIGHASH)):
             raise Exception("invalid sighash: {}".format(sigtype))
     except Exception:
@@ -2291,7 +2299,7 @@ class PartialTransaction(Transaction):
         inputs = self.inputs()
         outputs = self.outputs()
         txin = inputs[txin_index]
-        sighash = txin.sighash if txin.sighash is not None else SIGHASH.ALL
+        sighash = txin.sighash if txin.sighash is not None else SIGHASH.ALL_FORKID
         if sighash not in list(map(int, SIGHASH)):
             raise Exception("invalid sighash: {}".format(sighash))
         nHashType = int_to_hex(sighash, 4)
@@ -2379,13 +2387,13 @@ class PartialTransaction(Transaction):
     def sign_txin(self, txin_index, privkey_bytes, *, bip143_shared_txdigest_fields=None) -> str:
         txin = self.inputs()[txin_index]
         txin.validate_data(for_signing=True)
-        sighash = txin.sighash if txin.sighash is not None else SIGHASH.ALL
+        sighash = txin.sighash if txin.sighash is not None else SIGHASH.ALL_FORKID
         sighash_type = sighash.to_bytes(length=1, byteorder="big").hex()
         pre_hash = sha256d(bfh(self.serialize_preimage(txin_index,
                                                        bip143_shared_txdigest_fields=bip143_shared_txdigest_fields)))
         privkey = ecc.ECPrivkey(privkey_bytes)
         sig = privkey.sign_transaction(pre_hash)
-        sig = bh2u(sig) + '{0:02x}'.format(txin.sighash if txin.sighash else SIGHASH.ALL)
+        sig = bh2u(sig) + '{0:02x}'.format(txin.sighash if txin.sighash else SIGHASH.ALL_FORKID)
         return sig
 
     def is_complete(self) -> bool:
