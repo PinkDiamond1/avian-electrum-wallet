@@ -622,11 +622,6 @@ class Interface(Logger):
         if not is_non_negative_integer(height):
             raise Exception(f"{repr(height)} is not a block height")
 
-        # For chunks within DGW checkpoints, we need to reset to start of 2016 chunks
-        if constants.net.DGW_CHECKPOINTS_START <= height <= constants.net.max_dgw_checkpoint() + constants.net.DGW_CHECKPOINTS_SPACING:
-            #print(f'interface request chunk, setting height from {height}')
-            height = (height // constants.net.DGW_CHECKPOINTS_SPACING) * constants.net.DGW_CHECKPOINTS_SPACING
-
         ret = False
 
         for mi, ma in self._requested_chunks:
@@ -794,17 +789,9 @@ class Interface(Logger):
         while last is None or height <= next_height:
             prev_last, prev_height = last, height
             if next_height > height + 10:
-
-                if (not got_less_than_spacing and height >= constants.net.DGW_CHECKPOINTS_START):
-                    # For DGW, ensure we start and get a chunk amount so we can properly match
-                    # the start and end block's targets
-                    height = (height // constants.net.DGW_CHECKPOINTS_SPACING) * constants.net.DGW_CHECKPOINTS_SPACING
-
                 could_connect, num_headers = await self.request_chunk(height, next_height)
 
                 if not could_connect:
-                    if height <= constants.net.max_dgw_checkpoint() + 2016:
-                        raise GracefulDisconnect('server chain conflicts with checkpoints or genesis')
                     last, height = await self.step(height)
                     continue
 
@@ -872,7 +859,7 @@ class Interface(Logger):
             if good + 1 == bad:
                 break
 
-        mock = 'mock' in bad_header and bad_header['mock']['connect'](height)
+        mock = True
         real = not mock and self.blockchain.can_connect(bad_header, check_height=False)
         if not real and not mock:
             raise Exception('unexpected bad header during binary: {}'.format(bad_header))

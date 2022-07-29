@@ -91,10 +91,9 @@ class SPV(NetworkJobOnDefaultServer):
             # if it's in the checkpoint region, we still might not have the header
             header = self.blockchain.read_header(tx_height)
             if header is None:
-                if tx_height < constants.net.max_dgw_checkpoint():
-                    # FIXME these requests are not counted (self._requests_sent += 1)
-                    await self.taskgroup.spawn(self.interface.request_chunk(tx_height, None, can_return_early=True))
-                    # await self.interface.request_chunk(tx_height, None, can_return_early=True)
+                # FIXME these requests are not counted (self._requests_sent += 1)
+                await self.taskgroup.spawn(self.interface.request_chunk(tx_height, None, can_return_early=True))
+                # await self.interface.request_chunk(tx_height, None, can_return_early=True)
                 continue
             # request now
             self.logger.info(f'requested merkle {tx_hash}')
@@ -232,28 +231,25 @@ class SPV(NetworkJobOnDefaultServer):
             # if it's in the checkpoint region, we still might not have the header
             header = self.blockchain.read_header(largest_height)
             if header is None:
-                if largest_height < constants.net.max_dgw_checkpoint():
-                    # FIXME these requests are not counted (self._requests_sent += 1)
-                    await self.taskgroup.spawn(self.interface.request_chunk(largest_height, None, can_return_early=True))
-                    # await self.interface.request_chunk(tx_height, None, can_return_early=True)
+                # FIXME these requests are not counted (self._requests_sent += 1)
+                await self.taskgroup.spawn(self.interface.request_chunk(largest_height, None, can_return_early=True))
+                # await self.interface.request_chunk(tx_height, None, can_return_early=True)
                 continue
 
             if asset_meta.div_height:
                 prev_header = self.blockchain.read_header(asset_meta.div_height)
                 if prev_header is None:
-                    if asset_meta.div_height < constants.net.max_dgw_checkpoint():
-                        # FIXME these requests are not counted (self._requests_sent += 1)
-                        await self.taskgroup.spawn(self.interface.request_chunk(asset_meta.div_height, None, can_return_early=True))
-                        # await self.interface.request_chunk(tx_height, None, can_return_early=True)
+                    # FIXME these requests are not counted (self._requests_sent += 1)
+                    await self.taskgroup.spawn(self.interface.request_chunk(asset_meta.div_height, None, can_return_early=True))
+                    # await self.interface.request_chunk(tx_height, None, can_return_early=True)
                     continue
 
             if asset_meta.ipfs_height:
                 prev_header = self.blockchain.read_header(asset_meta.ipfs_height)
                 if prev_header is None:
-                    if asset_meta.ipfs_height < constants.net.max_dgw_checkpoint():
-                        # FIXME these requests are not counted (self._requests_sent += 1)
-                        await self.taskgroup.spawn(self.interface.request_chunk(asset_meta.ipfs_height, None, can_return_early=True))
-                        # await self.interface.request_chunk(tx_height, None, can_return_early=True)
+                    # FIXME these requests are not counted (self._requests_sent += 1)
+                    await self.taskgroup.spawn(self.interface.request_chunk(asset_meta.ipfs_height, None, can_return_early=True))
+                    # await self.interface.request_chunk(tx_height, None, can_return_early=True)
                     continue
 
             # request now

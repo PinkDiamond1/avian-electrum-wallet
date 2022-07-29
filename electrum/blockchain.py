@@ -175,10 +175,6 @@ def read_blockchains(config: 'SimpleConfig'):
         forkpoint = int(forkpoint)
         prev_hash = (64 - len(prev_hash)) * "0" + prev_hash  # left-pad with zeroes
         first_hash = (64 - len(first_hash)) * "0" + first_hash
-        # forks below the max checkpoint are not allowed
-        if forkpoint <= constants.net.max_dgw_checkpoint() + 2016:
-            delete_chain(filename, "deleting fork below max checkpoint")
-            return
         # find parent (sorting by forkpoint guarantees it's already instantiated)
         for parent in blockchains.values():
             if parent.check_hash(forkpoint - 1, prev_hash):
@@ -242,8 +238,6 @@ class Blockchain(Logger):
         assert isinstance(forkpoint_hash, str) and len(forkpoint_hash) == 64, forkpoint_hash
         assert (prev_hash is None) or (isinstance(prev_hash, str) and len(prev_hash) == 64), prev_hash
         # assert (parent is None) == (forkpoint == 0)
-        if 0 < forkpoint <= constants.net.max_dgw_checkpoint():
-            raise Exception(f"cannot fork below max checkpoint. forkpoint: {forkpoint}")
         Logger.__init__(self)
         self.config = config
         self.forkpoint = forkpoint  # height of first header
@@ -382,26 +376,12 @@ class Blockchain(Logger):
             header = deserialize_header(raw, s)
             headers[header.get('block_height')] = header
             
-            # Don't bother with the target of headers in the middle of
-            # DGW checkpoints
-            target = 0
-            if constants.net.DGW_CHECKPOINTS_START <= s <= constants.net.max_dgw_checkpoint() + 2016:
-                if self.is_dgw_height_checkpoint(s) is not None:
-                    target = self.get_target(s, headers)
-                else:
-                    # Just use the headers own bits for the logic
-                    target = self.bits_to_target(header['bits'])
-            else:
-                target = self.get_target(s, headers)
+            # Just use the headers own bits for the logic
+            target = self.bits_to_target(header['bits'])
             
             self.verify_header(header, prev_hash, target, expected_header_hash)
             prev_hash = hash_header(header)
             s += 1
-
-        # DGW must be received in correct chunk sizes to be valid with our checkpoints
-        if constants.net.DGW_CHECKPOINTS_START <= start_height <= constants.net.max_dgw_checkpoint():
-            assert start_height % constants.net.DGW_CHECKPOINTS_SPACING == 0, 'dgw chunk not from start'
-            assert s - start_height == constants.net.DGW_CHECKPOINTS_SPACING, 'dgw chunk not correct size'
 
     @with_lock
     def path(self):
@@ -417,56 +397,25 @@ class Blockchain(Logger):
         return os.path.join(d, filename)
 
     @with_lock
-    def save_chunk(self, start_height: int, chunk: bytes):
-        assert start_height >= 0, start_height
-        chunk_within_checkpoint_region = start_height < constants.net.max_dgw_checkpoint() + 2016
-        # chunks in checkpoint region are the responsibility of the 'main chain'
-        if chunk_within_checkpoint_region and self.parent is not None:
-            main_chain = get_best_chain()
-            main_chain.save_chunk(start_height, chunk)
-            return
+    def save_chunk(self, index: int, chunk: bytes):
+            assert index >= 0, index
+            chunk_within_checkpoint_region = index < len(constants.net.CHECKPOINTS)
+            # chunks in checkpoint region are the responsibility of the 'main chain'
+            if chunk_within_checkpoint_region and self.parent is not None:
+                main_chain = get_best_chain()
+                main_chain.save_chunk(index, chunk)
+                return
 
-        delta_height = (start_height - self.forkpoint)
-        delta_bytes = delta_height * POST_KAWPOW_HEADER_SIZE
-        # if this chunk contains our forkpoint, only save the part after forkpoint
-        # (the part before is the responsibility of the parent)
-        if delta_bytes < 0:
-            chunk = chunk[-delta_bytes:]
-            delta_bytes = 0
-        truncate = not chunk_within_checkpoint_region
-
-        def convert_to_kawpow_len():
-            r = b''
-            p = 0
-            s = start_height
-            while p < len(chunk):
-                r += chunk[p:p + PRE_KAWPOW_HEADER_SIZE] + bytes(40)
-                p += PRE_KAWPOW_HEADER_SIZE
-            if len(r) % POST_KAWPOW_HEADER_SIZE != 0:
-                raise Exception('Header extension error')
-            return r
-
-        chunk = convert_to_kawpow_len()
-        self.write(chunk, delta_bytes, truncate)
-        assert self.read_header(start_height) == deserialize_header(chunk[:120], start_height)
-        self.swap_with_parent()
-
-    def swap_with_parent(self) -> None:
-        with self.lock, blockchains_lock:
-            # do the swap; possibly multiple ones
-            cnt = 0
-            while True:
-                old_parent = self.parent
-                if not self._swap_with_parent():
-                    break
-                # make sure we are making progress
-                cnt += 1
-                if cnt > len(blockchains):
-                    raise Exception(f'swapping fork with parent too many times: {cnt}')
-                # we might have become the parent of some of our former siblings
-                for old_sibling in old_parent.get_direct_children():
-                    if self.check_hash(old_sibling.forkpoint - 1, old_sibling._prev_hash):
-                        old_sibling.parent = self
+            delta_height = (index * 2016 - self.forkpoint)
+            delta_bytes = delta_height * PRE_KAWPOW_HEADER_SIZE
+            # if this chunk contains our forkpoint, only save the part after forkpoint
+            # (the part before is the responsibility of the parent)
+            if delta_bytes < 0:
+                chunk = chunk[-delta_bytes:]
+                delta_bytes = 0
+            truncate = not chunk_within_checkpoint_region
+            self.write(chunk, delta_bytes, truncate)
+            self.swap_with_parent()
 
     def _swap_with_parent(self) -> bool:
         """Check if this chain became stronger than its parent, and swap
@@ -745,12 +694,6 @@ class Blockchain(Logger):
             # On testnet/regtest, difficulty works somewhat different.
             # It's out of scope to properly implement that.
             return height
-
-        # With DGW checkpoints, we cannot determine the work on the blocks between
-        # Since we cannot fork below the checkpoints, lets just set chainwork under them
-        # to 0
-        if height < constants.net.max_dgw_checkpoint() + 2016:
-            return 0
 
         # We want to calculate chainwork from 0.
         # Lets use bitcoin chunks for arbitrary checkpoints
