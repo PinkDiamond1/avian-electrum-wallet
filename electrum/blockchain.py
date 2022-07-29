@@ -83,23 +83,13 @@ class InvalidHeader(Exception):
 
 def serialize_header(header_dict: dict) -> str:
     ts = header_dict['timestamp']
-    if ts >= KawpowActivationTS:
-        s = int_to_hex(header_dict['version'], 4) \
-            + rev_hex(header_dict['prev_block_hash']) \
-            + rev_hex(header_dict['merkle_root']) \
-            + int_to_hex(int(header_dict['timestamp']), 4) \
-            + int_to_hex(int(header_dict['bits']), 4) \
-            + int_to_hex(int(header_dict['nheight']), 4) \
-            + int_to_hex(int(header_dict['nonce']), 8) \
-            + rev_hex(header_dict['mix_hash'])
-    else:
-        s = int_to_hex(header_dict['version'], 4) \
-            + rev_hex(header_dict['prev_block_hash']) \
-            + rev_hex(header_dict['merkle_root']) \
-            + int_to_hex(int(header_dict['timestamp']), 4) \
-            + int_to_hex(int(header_dict['bits']), 4) \
-            + int_to_hex(int(header_dict['nonce']), 4)
-        s = s.ljust(POST_KAWPOW_HEADER_SIZE * 2, '0')  # pad with zeros to post kawpow header size
+    s = int_to_hex(header_dict['version'], 4) \
+        + rev_hex(header_dict['prev_block_hash']) \
+        + rev_hex(header_dict['merkle_root']) \
+        + int_to_hex(int(header_dict['timestamp']), 4) \
+        + int_to_hex(int(header_dict['bits']), 4) \
+        + int_to_hex(int(header_dict['nonce']), 4)
+    s = s.ljust(POST_KAWPOW_HEADER_SIZE * 2, '0')  # pad with zeros to post kawpow header size
     return s
 
 
@@ -117,12 +107,7 @@ def deserialize_header(s: bytes, height: int) -> dict:
          'merkle_root': hash_encode(s[36:68]),
          'timestamp': int(hash_encode(s[68:72]), 16),
          'bits': int(hash_encode(s[72:76]), 16)}
-    if h['timestamp'] >= KawpowActivationTS:
-        h['nheight'] = int(hash_encode(s[76:80]), 16)
-        h['nonce'] = int(hash_encode(s[80:88]), 16)
-        h['mix_hash'] = hash_encode(s[88:120])
-    else:
-        h['nonce'] = int(hash_encode(s[76:80]), 16)
+    h['nonce'] = int(hash_encode(s[76:80]), 16)
     h['block_height'] = height
     return h
 
@@ -132,11 +117,9 @@ def hash_header(header: dict) -> str:
         return '0' * 64
     if header.get('prev_block_hash') is None:
         header['prev_block_hash'] = '00' * 32
-    if header['timestamp'] >= KawpowActivationTS:
-        return hash_raw_header_kawpow(serialize_header(header))
-    elif header['timestamp'] >= X16Rv2ActivationTS:
+    elif header['timestamp'] >= X16RTActivationTS:
         hdr = serialize_header(header)[:80 * 2]
-        h = hash_raw_header_v2(hdr)
+        h = hash_raw_header_x16rt(hdr)
         return h
     else:
         hdr = serialize_header(header)[:80 * 2]
@@ -150,8 +133,8 @@ def hash_raw_header(header: str) -> str:
     return hash_result
 
 
-def hash_raw_header_v2(header: str) -> str:
-    raw_hash = x16rv2_hash.getPoWHash(bfh(header)[:80])
+def hash_raw_header_x16rt(header: str) -> str:
+    raw_hash = x16rt_hash.getPoWHash(bfh(header)[:80])
     hash_result = hash_encode(raw_hash)
     return hash_result
 

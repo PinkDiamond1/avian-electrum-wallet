@@ -1,13 +1,13 @@
 {
-  "avn.network": {
+  "electrum-us.avn.network": {
     "pruning": "-",
     "s": "50002",
     "t": "50001",
     "version": "1.10"
   },
-  "127.0.0.1": {
+  "electrum-eu.avn.network": {
     "pruning": "-",
-    "s": "50001",
+    "s": "50002",
     "t": "50001",
     "version": "1.10"
   }
