@@ -357,6 +357,12 @@ class Blockchain(Logger):
         bits = cls.target_to_bits(target)
         if bits != header.get('bits'):
             raise Exception("bits mismatch: %s vs %s" % (bits, header.get('bits')))
+        elif header['timestamp'] >= CrowActivationTS:
+            version = int(header['version'])
+            if (version >> 16) & 0xFF == 0:
+                hash_func = x16rt_hash.getPoWHash
+            else:
+                hash_func = minotaurx_hash.getPoWHash
         elif header['timestamp'] >= X16RTActivationTS:
             hash_func = x16rt_hash.getPoWHash
         else:
