@@ -396,26 +396,44 @@ class Blockchain(Logger):
             filename = os.path.join('forks', basename)
         return os.path.join(d, filename)
 
+
     @with_lock
     def save_chunk(self, index: int, chunk: bytes):
-            assert index >= 0, index
-            chunk_within_checkpoint_region = index < len(constants.net.CHECKPOINTS)
-            # chunks in checkpoint region are the responsibility of the 'main chain'
-            if chunk_within_checkpoint_region and self.parent is not None:
-                main_chain = get_best_chain()
-                main_chain.save_chunk(index, chunk)
-                return
+        assert index >= 0, index
+        chunk_within_checkpoint_region = index < len(self.checkpoints)
+        # chunks in checkpoint region are the responsibility of the 'main chain'
+        if chunk_within_checkpoint_region and self.parent is not None:
+            main_chain = get_best_chain()
+            main_chain.save_chunk(index, chunk)
+            return
 
-            delta_height = (index * 2016 - self.forkpoint)
-            delta_bytes = delta_height * HEADER_SIZE
-            # if this chunk contains our forkpoint, only save the part after forkpoint
-            # (the part before is the responsibility of the parent)
-            if delta_bytes < 0:
-                chunk = chunk[-delta_bytes:]
-                delta_bytes = 0
-            truncate = not chunk_within_checkpoint_region
-            self.write(chunk, delta_bytes, truncate)
-            # self.swap_with_parent()
+        delta_height = (index * 2016 - self.forkpoint)
+        delta_bytes = delta_height * HEADER_SIZE
+        # if this chunk contains our forkpoint, only save the part after forkpoint
+        # (the part before is the responsibility of the parent)
+        if delta_bytes < 0:
+            chunk = chunk[-delta_bytes:]
+            delta_bytes = 0
+        truncate = not chunk_within_checkpoint_region
+        self.write(chunk, delta_bytes, truncate)
+        self.swap_with_parent()
+
+    def swap_with_parent(self) -> None:
+        with self.lock, blockchains_lock:
+            # do the swap; possibly multiple ones
+            cnt = 0
+            while True:
+                old_parent = self.parent
+                if not self._swap_with_parent():
+                    break
+                # make sure we are making progress
+                cnt += 1
+                if cnt > len(blockchains):
+                    raise Exception(f'swapping fork with parent too many times: {cnt}')
+                # we might have become the parent of some of our former siblings
+                for old_sibling in old_parent.get_direct_children():
+                    if self.check_hash(old_sibling.forkpoint - 1, old_sibling._prev_hash):
+                        old_sibling.parent = self
 
     def _swap_with_parent(self) -> bool:
         """Check if this chain became stronger than its parent, and swap
@@ -497,7 +515,7 @@ class Blockchain(Logger):
         assert delta == self.size(), (delta, self.size())
         assert len(data) == HEADER_SIZE
         self.write(data, delta * HEADER_SIZE)
-        # self.swap_with_parent()
+        self.swap_with_parent()
 
     @with_lock
     def read_header(self, height: int) -> Optional[dict]:
