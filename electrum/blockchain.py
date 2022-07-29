@@ -111,9 +111,10 @@ def hash_header(header: dict) -> str:
         version = int(header['version'])
         if (version >> 16) & 0xFF == 0:
             h = hash_raw_header_x16rt(hdr)
+            return h      
         else:
             h = hash_raw_header_minotaurx(hdr)
-        return h        
+            return h
     elif header['timestamp'] >= X16RTActivationTS:
         hdr = serialize_header(header)[:80 * 2]
         h = hash_raw_header_x16rt(hdr)
@@ -753,7 +754,6 @@ class Blockchain(Logger):
         try:
             data = bfh(hexdata)
 
-            # This is computationally intensive (thanks DGW)
             self.verify_chunk(start_height, data)
             
             self.save_chunk(start_height, data)

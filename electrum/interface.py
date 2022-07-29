@@ -849,7 +849,7 @@ class Interface(Logger):
             height = (good + bad) // 2
             self.logger.info(f"binary step. good {good}, bad {bad}, height {height}")
             header = await self.get_block_header(height, 'binary')
-            chain = blockchain.check_header(header) if 'mock' not in header else header['mock']['check'](header)
+            chain = blockchain.check_header(header)
             if chain:
                 self.blockchain = chain if isinstance(chain, Blockchain) else self.blockchain
                 good = height
@@ -859,9 +859,8 @@ class Interface(Logger):
             if good + 1 == bad:
                 break
 
-        mock = 'mock' in bad_header and bad_header['mock']['connect'](height)
-        real = not mock and self.blockchain.can_connect(bad_header, check_height=False)
-        if not real and not mock:
+        real = self.blockchain.can_connect(bad_header, check_height=False)
+        if not real:
             raise Exception('unexpected bad header during binary: {}'.format(bad_header))
         _assert_header_does_not_check_against_any_chain(bad_header)
 
