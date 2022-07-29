@@ -366,30 +366,22 @@ class Blockchain(Logger):
         if int('0x' + _powhash, 16) > target:
             raise Exception("insufficient proof of work: %s vs target %s" % (int('0x' + _powhash, 16), target))
 
-    def verify_chunk(self, start_height: int, data: bytes) -> None:
-        raw = []
-        p = 0
-        s = start_height
+
+    def verify_chunk(self, index: int, data: bytes) -> None:
+        num = len(data) // HEADER_SIZE
+        start_height = index * 2016
         prev_hash = self.get_hash(start_height - 1)
-        headers = {}
-        while p < len(data):
-            raw = data[p:p + HEADER_SIZE]
-            p += HEADER_SIZE
+        target = self.get_target(index-1)
+        for i in range(num):
+            height = start_height + i
             try:
-                expected_header_hash = self.get_hash(s)
+                expected_header_hash = self.get_hash(height)
             except MissingHeader:
                 expected_header_hash = None
-            if len(raw) not in (HEADER_SIZE, HEADER_SIZE):
-                raise Exception('Invalid header length: {}'.format(len(raw)))
-            header = deserialize_header(raw, s)
-            headers[header.get('block_height')] = header
-            
-            # Just use the headers own bits for the logic
-            target = self.bits_to_target(header['bits'])
-            
+            raw_header = data[i*HEADER_SIZE : (i+1)*HEADER_SIZE]
+            header = deserialize_header(raw_header, index*2016 + i)
             self.verify_header(header, prev_hash, target, expected_header_hash)
             prev_hash = hash_header(header)
-            s += 1
 
     @with_lock
     def path(self):
