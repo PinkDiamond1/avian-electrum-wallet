@@ -111,17 +111,25 @@ def hash_header(header: dict) -> str:
         return '0' * 64
     if header.get('prev_block_hash') is None:
         header['prev_block_hash'] = '00' * 32
+    elif header['timestamp'] >= CrowActivationTS:
+        hdr = serialize_header(header)[:80 * 2]
+        version = int(header['version'])
+        if (version >> 16) & 0xFF == 0:
+            h = hash_raw_header_x16rt(hdr)
+        else:
+            h = hash_raw_header_minotaurx(hdr)
+        return h        
     elif header['timestamp'] >= X16RTActivationTS:
         hdr = serialize_header(header)[:80 * 2]
         h = hash_raw_header_x16rt(hdr)
         return h
     else:
         hdr = serialize_header(header)[:80 * 2]
-        h = hash_raw_header(hdr)
+        h = hash_raw_header_x16r(hdr)
         return h
 
 
-def hash_raw_header(header: str) -> str:
+def hash_raw_header_x16r(header: str) -> str:
     raw_hash = x16r_hash.getPoWHash(bfh(header)[:80])
     hash_result = hash_encode(raw_hash)
     return hash_result
@@ -133,23 +141,16 @@ def hash_raw_header_x16rt(header: str) -> str:
     return hash_result
 
 
+def hash_raw_header_minotaurx(header: str) -> str:
+    raw_hash = minotaurx_hash.getPoWHash(bfh(header)[:80])
+    hash_result = hash_encode(raw_hash)
+    return hash_result
+
+
 def revb(data):
     b = bytearray(data)
     b.reverse()
     return bytes(b)
-
-
-def kawpow_hash(hdr_bin):
-    header_hash = revb(sha256d(hdr_bin[:80]))
-    mix_hash = revb(hdr_bin[88:120])
-    nNonce64 = struct.unpack("< Q", hdr_bin[80:88])[0]
-    final_hash = revb(kawpow.light_verify(header_hash, mix_hash, nNonce64))
-    return final_hash
-
-
-def hash_raw_header_kawpow(header: str) -> str:
-    final_hash = hash_encode(kawpow_hash(bfh(header)))
-    return final_hash
 
 
 # key: blockhash hex at forkpoint
