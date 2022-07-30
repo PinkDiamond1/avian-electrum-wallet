@@ -55,26 +55,7 @@ CROW_LIMIT = 0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 
 HEADER_SIZE = 80
 
-# DGW
 DGW_PASTBLOCKS = 180
-
-# LWMA
-POW_AVERAGING_WINDOW = 45
-POW_MEDIAN_BLOCK_SPAN = 11
-POW_MAX_ADJUST_DOWN = 34
-POW_MAX_ADJUST_UP = 34
-POW_DAMPING_FACTOR = 4
-POW_TARGET_SPACING = 150
-
-TARGET_CALC_BLOCKS = POW_AVERAGING_WINDOW + POW_MEDIAN_BLOCK_SPAN
-
-AVERAGING_WINDOW_TIMESPAN = POW_AVERAGING_WINDOW * POW_TARGET_SPACING
-
-MIN_ACTUAL_TIMESPAN = AVERAGING_WINDOW_TIMESPAN * \
-    (100 - POW_MAX_ADJUST_UP) // 100
-
-MAX_ACTUAL_TIMESPAN = AVERAGING_WINDOW_TIMESPAN * \
-    (100 + POW_MAX_ADJUST_DOWN) // 100
 
 X16RTActivationTS = 1638847406
 CrowActivationTS = 1638847407
@@ -239,7 +220,7 @@ def init_headers_file_for_best_chain():
     filename = b.path()
     # We want to start with one less than the checkpoint so we have headers to calculate the new
     # Chainwork from
-    length = HEADER_SIZE
+    length = HEADER_SIZE*  len(constants.net.CHECKPOINTS) * 2016
     if not os.path.exists(filename) or os.path.getsize(filename) < length:
         with open(filename, 'wb') as f:
             if length > 0:
@@ -268,6 +249,10 @@ class Blockchain(Logger):
         self._prev_hash = prev_hash  # blockhash immediately before forkpoint
         self.lock = threading.RLock()
         self.update_size()
+
+    @property
+    def checkpoints(self):
+        return constants.net.CHECKPOINTS
         
     def get_max_child(self) -> Optional[int]:
         children = self.get_direct_children()
@@ -369,9 +354,10 @@ class Blockchain(Logger):
             raise Exception("prev hash mismatch: %s vs %s" % (prev_hash, header.get('prev_block_hash')))
         if constants.net.TESTNET:
             return
-        bits = cls.target_to_bits(target)
-        if bits != header.get('bits'):
-            raise Exception("bits mismatch: %s vs %s" % (bits, header.get('bits')))
+        # Avian: don't check bits
+        # bits = cls.target_to_bits(target)
+        # if bits != header.get('bits'):
+        #     raise Exception("bits mismatch: %s vs %s" % (bits, header.get('bits')))
         elif header['timestamp'] >= CrowActivationTS:
             version = int(header['version'])
             if (version >> 16) & 0xFF == 0:
@@ -577,10 +563,18 @@ class Blockchain(Logger):
         return False
 
     def get_hash(self, height: int) -> str:
+        def is_height_checkpoint():
+            within_cp_range = height <= constants.net.max_checkpoint()
+            at_chunk_boundary = (height+1) % 2016 == 0
+            return within_cp_range and at_chunk_boundary
+
         if height == -1:
             return '0000000000000000000000000000000000000000000000000000000000000000'
         elif height == 0:
             return constants.net.GENESIS
+        elif is_height_checkpoint():
+            index = height // 2016
+            return self.checkpoints[index][0]
         else:
             header = self.read_header(height)
             if header is None:
@@ -588,18 +582,10 @@ class Blockchain(Logger):
             return hash_header(header)
 
     def get_target(self, height: int, chain=None) -> int:
-        if height < 181:
-            # Not sure why all limits prior to block 181 is X16R_LIMIT
-            return X16R_LIMIT
-        if height < CrowActivationBlock:
-            # Before Crow dual-algo system use dgw limit
-            return self.get_target_dgwv3(height, chain)
-        if height >= 275109:
-            # LWMA Take 2
-            return self.get_target_lwma2(height, chain)
+        if height < len(self.checkpoints):
+            return self.checkpoints[height][1]
         else:
-            # During Algo swap issue
-            return self.get_target_lwma2(height, chain)
+            return MAX_TARGET
 
     def convbignum(self, bits):
         MM = 256 * 256 * 256
@@ -662,47 +648,6 @@ class Blockchain(Logger):
         bnNew = min(bnNew, MAX_TARGET)
 
         return bnNew
-
-    def get_target_lwma2(self, height, chunk_headers=None):
-        if chunk_headers is None or chunk_headers['empty']:
-            chunk_empty = True
-        else:
-            chunk_empty = False
-            min_height = chunk_headers['min_height']
-            max_height = chunk_headers['max_height']
-
-        if height <= POW_AVERAGING_WINDOW:
-            return MAX_TARGET
-
-        height_range = range(max(0, height - POW_AVERAGING_WINDOW),
-                             max(1, height))
-        mean_target = 0
-        for h in height_range:
-            header = self.read_header(h)
-            if not header and not chunk_empty \
-                and min_height <= h <= max_height:
-                    header = chunk_headers[h]
-            if not header:
-                raise Exception("Can not read header at height %s" % h)
-            mean_target += self.bits_to_target(header.get('bits'))
-        mean_target //= POW_AVERAGING_WINDOW
-
-        actual_timespan = self.get_median_time(height, chunk_headers) - \
-            self.get_median_time(height - POW_AVERAGING_WINDOW, chunk_headers)
-        actual_timespan = AVERAGING_WINDOW_TIMESPAN + \
-            int((actual_timespan - AVERAGING_WINDOW_TIMESPAN) / \
-                POW_DAMPING_FACTOR)
-        if actual_timespan < MIN_ACTUAL_TIMESPAN:
-            actual_timespan = MIN_ACTUAL_TIMESPAN
-        elif actual_timespan > MAX_ACTUAL_TIMESPAN:
-            actual_timespan = MAX_ACTUAL_TIMESPAN
-
-        next_target = mean_target // AVERAGING_WINDOW_TIMESPAN * actual_timespan
-
-        if next_target > MAX_TARGET:
-            next_target = MAX_TARGET
-
-        return next_target
 
     @classmethod
     def bits_to_target(cls, bits: int) -> int:
