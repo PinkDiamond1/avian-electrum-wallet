@@ -55,7 +55,26 @@ CROW_LIMIT = 0x000fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
 
 HEADER_SIZE = 80
 
+# DGW
 DGW_PASTBLOCKS = 180
+
+# LWMA
+POW_AVERAGING_WINDOW = 45
+POW_MEDIAN_BLOCK_SPAN = 11
+POW_MAX_ADJUST_DOWN = 34
+POW_MAX_ADJUST_UP = 34
+POW_DAMPING_FACTOR = 4
+POW_TARGET_SPACING = 150
+
+TARGET_CALC_BLOCKS = POW_AVERAGING_WINDOW + POW_MEDIAN_BLOCK_SPAN
+
+AVERAGING_WINDOW_TIMESPAN = POW_AVERAGING_WINDOW * POW_TARGET_SPACING
+
+MIN_ACTUAL_TIMESPAN = AVERAGING_WINDOW_TIMESPAN * \
+    (100 - POW_MAX_ADJUST_UP) // 100
+
+MAX_ACTUAL_TIMESPAN = AVERAGING_WINDOW_TIMESPAN * \
+    (100 + POW_MAX_ADJUST_DOWN) // 100
 
 X16RTActivationTS = 1638847406
 CrowActivationTS = 1638847407
@@ -569,16 +588,18 @@ class Blockchain(Logger):
             return hash_header(header)
 
     def get_target(self, height: int, chain=None) -> int:
+        if height < 181:
+            # Not sure why all limits prior to block 181 is X16R_LIMIT
+            return X16R_LIMIT
         if height < CrowActivationBlock:
-            # Before Crow dual-algo system use x16r/t limit
-            return X16R_LIMIT
-        version = int(self.read_header(height)['version'])
-        if (version >> 16) & 0xFF == 0:
-            # Crow dual-algo X16RT
-            return X16R_LIMIT
+            # Before Crow dual-algo system use dgw limit
+            return self.get_target_dgwv3(height, chain)
+        if height >= 275109:
+            # LWMA Take 2
+            return self.get_target_lwma2(height, chain)
         else:
-            # Crow dual-algo MinotaurX
-            return CROW_LIMIT
+            # During Algo swap issue
+            return self.get_target_lwma2(height, chain)
 
     def convbignum(self, bits):
         MM = 256 * 256 * 256
@@ -630,7 +651,7 @@ class Blockchain(Logger):
             BlockReading = get_block_reading_from_height((height - 1) - CountBlocks)
 
         bnNew = PastDifficultyAverage
-        nTargetTimespan = CountBlocks * 60  # 1 min
+        nTargetTimespan = CountBlocks * 30  # 30 second
 
         nActualTimespan = max(nActualTimespan, nTargetTimespan // 3)
         nActualTimespan = min(nActualTimespan, nTargetTimespan * 3)
@@ -641,6 +662,47 @@ class Blockchain(Logger):
         bnNew = min(bnNew, MAX_TARGET)
 
         return bnNew
+
+    def get_target_lwma2(self, height, chunk_headers=None):
+        if chunk_headers is None or chunk_headers['empty']:
+            chunk_empty = True
+        else:
+            chunk_empty = False
+            min_height = chunk_headers['min_height']
+            max_height = chunk_headers['max_height']
+
+        if height <= POW_AVERAGING_WINDOW:
+            return MAX_TARGET
+
+        height_range = range(max(0, height - POW_AVERAGING_WINDOW),
+                             max(1, height))
+        mean_target = 0
+        for h in height_range:
+            header = self.read_header(h)
+            if not header and not chunk_empty \
+                and min_height <= h <= max_height:
+                    header = chunk_headers[h]
+            if not header:
+                raise Exception("Can not read header at height %s" % h)
+            mean_target += self.bits_to_target(header.get('bits'))
+        mean_target //= POW_AVERAGING_WINDOW
+
+        actual_timespan = self.get_median_time(height, chunk_headers) - \
+            self.get_median_time(height - POW_AVERAGING_WINDOW, chunk_headers)
+        actual_timespan = AVERAGING_WINDOW_TIMESPAN + \
+            int((actual_timespan - AVERAGING_WINDOW_TIMESPAN) / \
+                POW_DAMPING_FACTOR)
+        if actual_timespan < MIN_ACTUAL_TIMESPAN:
+            actual_timespan = MIN_ACTUAL_TIMESPAN
+        elif actual_timespan > MAX_ACTUAL_TIMESPAN:
+            actual_timespan = MAX_ACTUAL_TIMESPAN
+
+        next_target = mean_target // AVERAGING_WINDOW_TIMESPAN * actual_timespan
+
+        if next_target > MAX_TARGET:
+            next_target = MAX_TARGET
+
+        return next_target
 
     @classmethod
     def bits_to_target(cls, bits: int) -> int:
