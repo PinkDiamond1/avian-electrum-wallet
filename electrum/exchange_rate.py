@@ -176,7 +176,7 @@ class CoinGecko(ExchangeBase):
 
     async def get_rates(self, ccy):
         dicts = await self.get_json('api.coingecko.com',
-                                    '/api/v3/coins/avian/market_chart?vs_currency=%s&days=1' % ccy)
+                                    '/api/v3/coins/avian-network/market_chart?vs_currency=%s&days=1' % ccy)
         return {ccy: to_decimal(dicts['prices'][-1][1])}
 
     def history_ccys(self):
@@ -184,7 +184,7 @@ class CoinGecko(ExchangeBase):
 
     async def request_history(self, ccy):
         dicts = await self.get_json('api.coingecko.com',
-                                    '/api/v3/coins/avian/market_chart?vs_currency=%s&days=max' % ccy)
+                                    '/api/v3/coins/avian-network/market_chart?vs_currency=%s&days=max' % ccy)
         return dict([(datetime.utcfromtimestamp(d[0] / 1000).strftime('%Y-%m-%d'), to_decimal(d[1])) for d in dicts['prices']])
 
 class Bittrex(ExchangeBase):
