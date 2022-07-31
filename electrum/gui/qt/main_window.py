@@ -834,8 +834,7 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger, QtEventListener):
         help_menu = menubar.addMenu(_("&Help"))
         help_menu.addAction(_("&About"), self.show_about)
         help_menu.addAction(_("&Check for updates"), self.show_update_check)
-        help_menu.addAction("&AVN Electrum Wiki", lambda: webopen("https://avian.wiki/wiki/Electrum"))
-        help_menu.addAction("&GetAvian.org", lambda: webopen("https://GetAvian.org"))
+        help_menu.addAction("&avn.network", lambda: webopen("https://avn.network"))
         help_menu.addSeparator()
         help_menu.addAction(_("&Documentation"), lambda: webopen("http://docs.electrum.org/")).setShortcut(
             QKeySequence.HelpContents)
