@@ -2,12 +2,13 @@
 
 ## Reporting a Vulnerability
 
-To report security issues send an email to electrum.avian@gmail.com.
+To report security issues send an email to alamshafil@pm.me.
 
 The following keys may be used to communicate sensitive information to developers:
 
 | Name | Fingerprint |
 |------|-------------|
+Shafil Alam | 8D6FC359FDB624D580BB390891512EB4C9B538A9
 
 You can import a key by running the following command with that
 individual’s fingerprint: `gpg --recv-keys "<fingerprint>"`
