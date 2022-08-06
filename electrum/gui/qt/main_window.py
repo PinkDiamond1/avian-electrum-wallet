@@ -214,6 +214,9 @@ class ElectrumWindow(QMainWindow, MessageBoxMixin, Logger, QtEventListener):
         coincontrol_sb = self.create_coincontrol_statusbar()
 
         self.tabs = tabs = QTabWidget(self)
+
+        tabs.setIconSize(QSize(32, 32))
+
         # We depend on the utxo tab in the send tab now
         # Circular dependencies ensue: TODO: Fix
         self.utxo_list = None
