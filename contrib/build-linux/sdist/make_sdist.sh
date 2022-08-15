@@ -24,24 +24,6 @@ python3 -m pip install --upgrade pip
 git submodule update --init
 
 (
-    cd "$CONTRIB/deterministic-build/electrum-locale/"
-    if ! which msgfmt > /dev/null 2>&1; then
-        echo "Please install gettext"
-        exit 1
-    fi
-    # We include both source (.po) and compiled (.mo) locale files in the source dist.
-    # Maybe we should exclude the compiled locale files? see https://askubuntu.com/a/144139
-    # (also see MANIFEST.in)
-    rm -rf "$LOCALE"
-    for i in ./locale/*; do
-        dir="$PROJECT_ROOT/electrum/$i/LC_MESSAGES"
-        mkdir -p "$dir"
-        msgfmt --output-file="$dir/electrum.mo" "$i/electrum.po" || true
-        cp $i/electrum.po "$PROJECT_ROOT/electrum/$i/electrum.po"
-    done
-)
-
-(
     cd "$PROJECT_ROOT"
 
     find -exec touch -h -d '2000-11-11T11:11:11+00:00' {} +
